@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: groupme-automation
+    runtime: node
+    region: oregon
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    plan: free
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      # Add the following in the Render UI with your secrets
+      - key: GROUPME_BOT_ID
+        sync: false
+      - key: GROUPME_ACCESS_TOKEN
+        sync: false
+      - key: BUILDERPRIME_API_KEY
+        sync: false
+      - key: BUILDERPRIME_WEBHOOK_SECRET
+        sync: false
+      - key: BUILDERPRIME_API_URL
+        value: https://api.builderprime.com/v1
+
