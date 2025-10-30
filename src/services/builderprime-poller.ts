@@ -1,0 +1,138 @@
+import axios from 'axios'
+import { sendGroupMeMessage } from './groupme'
+
+const POLL_INTERVAL_MS = 2 * 60 * 1000 // 2 minutes
+let lastCheckTime = Date.now()
+let isPolling = false
+
+interface BuilderPrimeMeeting {
+  id: number
+  title: string
+  startDateTime: number
+  createdDate: number
+  employeeFirstName: string
+  employeeLastName: string
+  clientFirstName: string
+  clientLastName: string
+  meetingTypeName: string
+  location?: string
+}
+
+interface BuilderPrimeResponse {
+  success: boolean
+  data: BuilderPrimeMeeting[]
+  errors?: Array<{ code: string; message: string }>
+}
+
+/**
+ * Fetch meetings from BuilderPrime API
+ */
+async function fetchMeetings(startDateFrom: number, startDateTo: number): Promise<BuilderPrimeMeeting[]> {
+  const apiKey = process.env.BUILDERPRIME_API_KEY
+  const baseUrl = process.env.BUILDERPRIME_API_URL || 'https://comercross.builderprime.com/api/meetings/v1'
+
+  if (!apiKey) {
+    console.warn('BUILDERPRIME_API_KEY not configured, skipping poll')
+    return []
+  }
+
+  try {
+    const response = await axios.get<BuilderPrimeResponse>(baseUrl, {
+      params: {
+        'start-date-from': startDateFrom,
+        'start-date-to': startDateTo,
+        limit: 100
+      },
+      headers: {
+        'x-api-key': apiKey
+      }
+    })
+
+    if (response.data.success && response.data.data) {
+      return response.data.data
+    } else {
+      console.error('BuilderPrime API error:', response.data.errors)
+      return []
+    }
+  } catch (error: any) {
+    console.error('Error fetching BuilderPrime meetings:', error.response?.data || error.message)
+    return []
+  }
+}
+
+/**
+ * Format meeting data for GroupMe message
+ */
+function formatMeetingMessage(meeting: BuilderPrimeMeeting): string {
+  const csrName = `${meeting.employeeFirstName} ${meeting.employeeLastName}`
+  const customerName = `${meeting.clientFirstName} ${meeting.clientLastName}`
+  const meetingDate = new Date(meeting.startDateTime)
+  const dateStr = meetingDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const timeStr = meetingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  
+  let message = `📅 Appointment Set by ${csrName}: ${customerName} — ${dateStr} @ ${timeStr} — ${meeting.meetingTypeName}`
+  
+  if (meeting.location) {
+    message += ` — Location: ${meeting.location}`
+  }
+  
+  return message
+}
+
+/**
+ * Check for new meetings and post to GroupMe
+ */
+async function pollForNewMeetings() {
+  console.log('🔄 Polling BuilderPrime for new appointments...')
+  
+  const now = Date.now()
+  const startDateFrom = lastCheckTime
+  const startDateTo = now
+  
+  try {
+    const meetings = await fetchMeetings(startDateFrom, startDateTo)
+    
+    // Filter for meetings created since last check
+    const newMeetings = meetings.filter(m => m.createdDate > lastCheckTime)
+    
+    console.log(`Found ${newMeetings.length} new appointments`)
+    
+    for (const meeting of newMeetings) {
+      const message = formatMeetingMessage(meeting)
+      await sendGroupMeMessage(message)
+      console.log(`✅ Posted appointment ${meeting.id} to GroupMe`)
+    }
+    
+    lastCheckTime = now
+  } catch (error) {
+    console.error('❌ Error polling BuilderPrime:', error)
+  }
+}
+
+/**
+ * Start polling for new meetings
+ */
+export function startPolling() {
+  if (isPolling) {
+    console.log('⚠️  Polling already running')
+    return
+  }
+  
+  console.log(`🚀 Starting BuilderPrime polling (every ${POLL_INTERVAL_MS / 1000}s)`)
+  isPolling = true
+  
+  // Poll immediately on start
+  pollForNewMeetings()
+  
+  // Then poll on interval
+  setInterval(pollForNewMeetings, POLL_INTERVAL_MS)
+}
+
+/**
+ * Stop polling
+ */
+export function stopPolling() {
+  isPolling = false
+  console.log('🛑 Stopped BuilderPrime polling')
+}
+
