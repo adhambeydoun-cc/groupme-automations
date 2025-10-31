@@ -91,10 +91,10 @@ async function pollForNewMeetings() {
   todayMidnight.setHours(0, 0, 0, 0)
   const todayMidnightMs = todayMidnight.getTime()
   
-  // Query meetings starting from 30 days ago to 1 year in the future
-  // to catch all appointments regardless of when they're scheduled
-  const startDateFrom = now - (30 * 24 * 60 * 60 * 1000) // 30 days ago
-  const startDateTo = now + (365 * 24 * 60 * 60 * 1000) // 1 year from now
+  // Query meetings scheduled within next 30 days (API limit is 31 days max)
+  // We'll filter by createdDate afterwards
+  const startDateFrom = now
+  const startDateTo = now + (30 * 24 * 60 * 60 * 1000) // 30 days from now
   
   try {
     const meetings = await fetchMeetings(startDateFrom, startDateTo)
