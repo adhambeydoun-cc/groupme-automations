@@ -91,20 +91,29 @@ async function pollForNewMeetings() {
   todayMidnight.setHours(0, 0, 0, 0)
   const todayMidnightMs = todayMidnight.getTime()
   
-  // Query meetings scheduled within next 30 days (API limit is 31 days max)
-  // We'll filter by createdDate afterwards
-  const startDateFrom = now
-  const startDateTo = now + (30 * 24 * 60 * 60 * 1000) // 30 days from now
-  
   try {
-    const meetings = await fetchMeetings(startDateFrom, startDateTo)
+    // Make multiple API calls to cover appointments scheduled up to 120 days out
+    // This ensures we catch appointments created TODAY regardless of when they're scheduled
+    const allMeetings: BuilderPrimeMeeting[] = []
+    const daysToQuery = 120 // Query 4 months into the future
+    const chunkSize = 30 // API limit is 31 days
+    
+    for (let offset = 0; offset < daysToQuery; offset += chunkSize) {
+      const startDateFrom = now + (offset * 24 * 60 * 60 * 1000)
+      const startDateTo = now + ((offset + chunkSize) * 24 * 60 * 60 * 1000)
+      
+      const meetings = await fetchMeetings(startDateFrom, startDateTo)
+      allMeetings.push(...meetings)
+    }
+    
+    console.log(`Retrieved ${allMeetings.length} total appointments from BuilderPrime`)
     
     // Filter for meetings created TODAY that we haven't notified about yet
-    const newMeetings = meetings.filter(m => 
+    const newMeetings = allMeetings.filter(m => 
       m.createdDate >= todayMidnightMs && !notifiedAppointments.has(m.id)
     )
     
-    console.log(`Found ${newMeetings.length} new appointments created today (after ${todayMidnight.toISOString()})`)
+    console.log(`Found ${newMeetings.length} new appointments SET today (after ${todayMidnight.toISOString()})`)
     
     for (const meeting of newMeetings) {
       const message = formatMeetingMessage(meeting)
