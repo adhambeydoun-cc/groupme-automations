@@ -2,8 +2,8 @@ import axios from 'axios'
 import { sendGroupMeMessage } from './groupme'
 
 const POLL_INTERVAL_MS = 2 * 60 * 1000 // 2 minutes
-let lastCheckTime = Date.now()
 let isPolling = false
+const notifiedAppointments = new Set<number>() // Track appointments we've already notified about
 
 interface BuilderPrimeMeeting {
   id: number
@@ -86,26 +86,32 @@ async function pollForNewMeetings() {
   console.log('🔄 Polling BuilderPrime for new appointments...')
   
   const now = Date.now()
+  // Get midnight today in UTC
+  const todayMidnight = new Date()
+  todayMidnight.setHours(0, 0, 0, 0)
+  const todayMidnightMs = todayMidnight.getTime()
+  
   // Query meetings starting from 30 days ago to 1 year in the future
-  // to catch all recently created appointments regardless of when they're scheduled
+  // to catch all appointments regardless of when they're scheduled
   const startDateFrom = now - (30 * 24 * 60 * 60 * 1000) // 30 days ago
   const startDateTo = now + (365 * 24 * 60 * 60 * 1000) // 1 year from now
   
   try {
     const meetings = await fetchMeetings(startDateFrom, startDateTo)
     
-    // Filter for meetings created since last check
-    const newMeetings = meetings.filter(m => m.createdDate > lastCheckTime)
+    // Filter for meetings created TODAY that we haven't notified about yet
+    const newMeetings = meetings.filter(m => 
+      m.createdDate >= todayMidnightMs && !notifiedAppointments.has(m.id)
+    )
     
-    console.log(`Found ${newMeetings.length} new appointments (created after ${new Date(lastCheckTime).toISOString()})`)
+    console.log(`Found ${newMeetings.length} new appointments created today (after ${todayMidnight.toISOString()})`)
     
     for (const meeting of newMeetings) {
       const message = formatMeetingMessage(meeting)
       await sendGroupMeMessage(message)
       console.log(`✅ Posted appointment ${meeting.id} to GroupMe: ${meeting.title}`)
+      notifiedAppointments.add(meeting.id) // Mark as notified
     }
-    
-    lastCheckTime = now
   } catch (error) {
     console.error('❌ Error polling BuilderPrime:', error)
   }
