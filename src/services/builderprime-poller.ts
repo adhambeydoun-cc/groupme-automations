@@ -86,8 +86,10 @@ async function pollForNewMeetings() {
   console.log('🔄 Polling BuilderPrime for new appointments...')
   
   const now = Date.now()
-  const startDateFrom = lastCheckTime
-  const startDateTo = now
+  // Query meetings starting from 30 days ago to 1 year in the future
+  // to catch all recently created appointments regardless of when they're scheduled
+  const startDateFrom = now - (30 * 24 * 60 * 60 * 1000) // 30 days ago
+  const startDateTo = now + (365 * 24 * 60 * 60 * 1000) // 1 year from now
   
   try {
     const meetings = await fetchMeetings(startDateFrom, startDateTo)
@@ -95,12 +97,12 @@ async function pollForNewMeetings() {
     // Filter for meetings created since last check
     const newMeetings = meetings.filter(m => m.createdDate > lastCheckTime)
     
-    console.log(`Found ${newMeetings.length} new appointments`)
+    console.log(`Found ${newMeetings.length} new appointments (created after ${new Date(lastCheckTime).toISOString()})`)
     
     for (const meeting of newMeetings) {
       const message = formatMeetingMessage(meeting)
       await sendGroupMeMessage(message)
-      console.log(`✅ Posted appointment ${meeting.id} to GroupMe`)
+      console.log(`✅ Posted appointment ${meeting.id} to GroupMe: ${meeting.title}`)
     }
     
     lastCheckTime = now
