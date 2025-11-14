@@ -16,6 +16,14 @@ interface BuilderPrimeMeeting {
   clientLastName: string
   meetingTypeName: string
   location?: string
+  opportunityId: number
+  clientId: number
+}
+
+interface ClientData {
+  id: number
+  leadSetterFirstName: string | null
+  leadSetterLastName: string | null
 }
 
 interface BuilderPrimeResponse {
@@ -61,10 +69,55 @@ async function fetchMeetings(startDateFrom: number, startDateTo: number): Promis
 }
 
 /**
+ * Fetch client/opportunity data to get lead setter info
+ */
+async function fetchLeadSetter(opportunityId: number): Promise<{ firstName: string; lastName: string } | null> {
+  const apiKey = process.env.BUILDERPRIME_API_KEY
+  const clientsUrl = 'https://comercross.builderprime.com/api/clients'
+
+  if (!apiKey) {
+    return null
+  }
+
+  try {
+    const response = await axios.get<ClientData[]>(clientsUrl, {
+      params: {
+        id: opportunityId,
+        limit: 500
+      },
+      headers: {
+        'x-api-key': apiKey
+      }
+    })
+
+    // Find the client with matching opportunity ID
+    const client = response.data.find(c => c.id === opportunityId)
+    
+    if (client && client.leadSetterFirstName && client.leadSetterLastName) {
+      return {
+        firstName: client.leadSetterFirstName,
+        lastName: client.leadSetterLastName
+      }
+    }
+    
+    return null
+  } catch (error: any) {
+    console.error('Error fetching lead setter:', error.response?.data || error.message)
+    return null
+  }
+}
+
+/**
  * Format meeting data for GroupMe message
  */
-function formatMeetingMessage(meeting: BuilderPrimeMeeting): string {
-  const csrName = `${meeting.employeeFirstName} ${meeting.employeeLastName}`
+async function formatMeetingMessage(meeting: BuilderPrimeMeeting): Promise<string> {
+  // Get the lead setter (CSR) info from the clients API
+  const leadSetter = await fetchLeadSetter(meeting.opportunityId)
+  
+  const csrName = leadSetter 
+    ? `${leadSetter.firstName} ${leadSetter.lastName}`
+    : 'Unknown CSR'
+  
   const customerName = `${meeting.clientFirstName} ${meeting.clientLastName}`
   const meetingDate = new Date(meeting.startDateTime)
   const dateStr = meetingDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -116,7 +169,7 @@ async function pollForNewMeetings() {
     console.log(`Found ${newMeetings.length} new appointments SET today (after ${todayMidnight.toISOString()})`)
     
     for (const meeting of newMeetings) {
-      const message = formatMeetingMessage(meeting)
+      const message = await formatMeetingMessage(meeting)
       await sendGroupMeMessage(message)
       console.log(`✅ Posted appointment ${meeting.id} to GroupMe: ${meeting.title}`)
       notifiedAppointments.add(meeting.id) // Mark as notified
