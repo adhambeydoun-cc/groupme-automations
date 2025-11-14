@@ -20,10 +20,14 @@ interface BuilderPrimeMeeting {
   clientId: number
 }
 
-interface ClientData {
-  id: number
+interface OpportunityData {
+  id: number // This is the opportunityId
+  firstName: string
+  lastName: string
   leadSetterFirstName: string | null
   leadSetterLastName: string | null
+  salesPersonFirstName: string | null
+  salesPersonLastName: string | null
 }
 
 interface BuilderPrimeResponse {
@@ -68,21 +72,25 @@ async function fetchMeetings(startDateFrom: number, startDateTo: number): Promis
   }
 }
 
+// Cache opportunities to avoid repeated API calls
+const opportunitiesCache = new Map<number, OpportunityData>()
+let lastOpportunitiesFetch = 0
+const CACHE_DURATION_MS = 5 * 60 * 1000 // 5 minutes
+
 /**
- * Fetch client/opportunity data to get lead setter info
+ * Fetch all opportunities to build a lookup cache
  */
-async function fetchLeadSetter(opportunityId: number): Promise<{ firstName: string; lastName: string } | null> {
+async function fetchOpportunities(): Promise<OpportunityData[]> {
   const apiKey = process.env.BUILDERPRIME_API_KEY
   const clientsUrl = 'https://comercross.builderprime.com/api/clients'
 
   if (!apiKey) {
-    return null
+    return []
   }
 
   try {
-    const response = await axios.get<ClientData[]>(clientsUrl, {
+    const response = await axios.get<OpportunityData[]>(clientsUrl, {
       params: {
-        id: opportunityId,
         limit: 500
       },
       headers: {
@@ -90,21 +98,44 @@ async function fetchLeadSetter(opportunityId: number): Promise<{ firstName: stri
       }
     })
 
-    // Find the client with matching opportunity ID
-    const client = response.data.find(c => c.id === opportunityId)
-    
-    if (client && client.leadSetterFirstName && client.leadSetterLastName) {
-      return {
-        firstName: client.leadSetterFirstName,
-        lastName: client.leadSetterLastName
-      }
-    }
-    
-    return null
+    return response.data || []
   } catch (error: any) {
-    console.error('Error fetching lead setter:', error.response?.data || error.message)
-    return null
+    console.error('Error fetching opportunities:', error.response?.data || error.message)
+    return []
   }
+}
+
+/**
+ * Get lead setter info for an opportunity (with caching)
+ */
+async function fetchLeadSetter(opportunityId: number): Promise<{ firstName: string; lastName: string } | null> {
+  const now = Date.now()
+  
+  // Refresh cache if it's stale
+  if (now - lastOpportunitiesFetch > CACHE_DURATION_MS) {
+    console.log('🔄 Refreshing opportunities cache...')
+    const opportunities = await fetchOpportunities()
+    
+    opportunitiesCache.clear()
+    opportunities.forEach(opp => {
+      opportunitiesCache.set(opp.id, opp)
+    })
+    
+    lastOpportunitiesFetch = now
+    console.log(`✅ Cached ${opportunities.length} opportunities`)
+  }
+  
+  // Lookup from cache
+  const opportunity = opportunitiesCache.get(opportunityId)
+  
+  if (opportunity?.leadSetterFirstName && opportunity?.leadSetterLastName) {
+    return {
+      firstName: opportunity.leadSetterFirstName,
+      lastName: opportunity.leadSetterLastName
+    }
+  }
+  
+  return null
 }
 
 /**
@@ -118,7 +149,11 @@ async function formatMeetingMessage(meeting: BuilderPrimeMeeting): Promise<strin
     ? `${leadSetter.firstName} ${leadSetter.lastName}`
     : 'Unknown CSR'
   
-  const customerName = `${meeting.clientFirstName} ${meeting.clientLastName}`
+  // Use title if customer name is missing
+  const customerName = meeting.clientFirstName && meeting.clientLastName
+    ? `${meeting.clientFirstName} ${meeting.clientLastName}`
+    : meeting.title.replace(' - Estimate', '').replace(' - ', ' ')
+  
   const meetingDate = new Date(meeting.startDateTime)
   const dateStr = meetingDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   const timeStr = meetingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
