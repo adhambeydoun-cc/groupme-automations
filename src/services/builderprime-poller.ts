@@ -93,7 +93,7 @@ async function fetchOpportunities(): Promise<OpportunityData[]> {
   }
 
   try {
-    const response = await axios.get<OpportunityData[]>(clientsUrl, {
+    const response = await axios.get<any[]>(clientsUrl, {
       params: {
         limit: 500
       },
@@ -102,7 +102,54 @@ async function fetchOpportunities(): Promise<OpportunityData[]> {
       }
     })
 
-    return response.data || []
+    const raw = response.data || []
+
+    // Normalize and map fields to our internal OpportunityData shape
+    const normalized: OpportunityData[] = raw.map((c: any) => {
+      const id = Number(c.id)
+
+      const leadSetterFirstName =
+        c.leadSetterFirstName ??
+        c.lead_setter_first_name ??
+        c.lead_setter?.first_name ??
+        null
+
+      const leadSetterLastName =
+        c.leadSetterLastName ??
+        c.lead_setter_last_name ??
+        c.lead_setter?.last_name ??
+        null
+
+      const salesPersonFirstName =
+        c.salesPersonFirstName ??
+        c.sales_person_first_name ??
+        c.sales_person?.first_name ??
+        null
+
+      const salesPersonLastName =
+        c.salesPersonLastName ??
+        c.sales_person_last_name ??
+        c.sales_person?.last_name ??
+        null
+
+      return {
+        id,
+        firstName: c.firstName ?? c.first_name ?? '',
+        lastName: c.lastName ?? c.last_name ?? '',
+        leadSetterFirstName,
+        leadSetterLastName,
+        salesPersonFirstName,
+        salesPersonLastName
+      }
+    })
+
+    // Log a small sample so we can verify the actual shape coming back from BuilderPrime
+    if (normalized.length > 0) {
+      const sample = normalized[0]
+      console.log('👀 Sample normalized client from BuilderPrime /api/clients:', sample)
+    }
+
+    return normalized
   } catch (error: any) {
     console.error('Error fetching opportunities:', error.response?.data || error.message)
     return []
@@ -132,13 +179,32 @@ async function fetchLeadSetter(clientId: number): Promise<{ firstName: string; l
   // Lookup from cache using the clientId from the meeting
   const opportunity = opportunitiesCache.get(clientId)
   
-  if (opportunity?.leadSetterFirstName && opportunity?.leadSetterLastName) {
-    return {
-      firstName: opportunity.leadSetterFirstName,
-      lastName: opportunity.leadSetterLastName
+  if (opportunity) {
+    console.log('🔎 Found client in cache for meeting.clientId', clientId, {
+      leadSetterFirstName: opportunity.leadSetterFirstName,
+      leadSetterLastName: opportunity.leadSetterLastName,
+      salesPersonFirstName: opportunity.salesPersonFirstName,
+      salesPersonLastName: opportunity.salesPersonLastName
+    })
+
+    if (opportunity.leadSetterFirstName && opportunity.leadSetterLastName) {
+      return {
+        firstName: opportunity.leadSetterFirstName,
+        lastName: opportunity.leadSetterLastName
+      }
     }
+
+    // Fallback: if no explicit lead setter, try salesperson before giving up
+    if (opportunity.salesPersonFirstName && opportunity.salesPersonLastName) {
+      return {
+        firstName: opportunity.salesPersonFirstName,
+        lastName: opportunity.salesPersonLastName
+      }
+    }
+  } else {
+    console.warn('⚠️ No client found in cache for meeting.clientId', clientId)
   }
-  
+
   return null
 }
 
@@ -146,6 +212,14 @@ async function fetchLeadSetter(clientId: number): Promise<{ firstName: string; l
  * Format meeting data for GroupMe message
  */
 async function formatMeetingMessage(meeting: BuilderPrimeMeeting): Promise<string> {
+  console.log('🧩 Formatting meeting message for', {
+    meetingId: meeting.id,
+    clientId: meeting.clientId,
+    opportunityId: meeting.opportunityId,
+    employeeFirstName: meeting.employeeFirstName,
+    employeeLastName: meeting.employeeLastName
+  })
+
   // Get the lead setter (CSR) info from the clients API.
   // NOTE: The `/api/clients` endpoint is keyed by client ID, so we must
   // look up using `meeting.clientId`, not `opportunityId`.
@@ -153,7 +227,10 @@ async function formatMeetingMessage(meeting: BuilderPrimeMeeting): Promise<strin
   
   const csrName = leadSetter 
     ? `${leadSetter.firstName} ${leadSetter.lastName}`
-    : 'Unknown CSR'
+    // As a secondary fallback, try the meeting's employee if present
+    : (meeting.employeeFirstName && meeting.employeeLastName
+        ? `${meeting.employeeFirstName} ${meeting.employeeLastName}`
+        : 'Unknown CSR')
   
   // Use title if customer name is missing
   const customerName = meeting.clientFirstName && meeting.clientLastName
