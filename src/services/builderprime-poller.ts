@@ -21,7 +21,11 @@ interface BuilderPrimeMeeting {
 }
 
 interface OpportunityData {
-  id: number // This is the opportunityId
+  /**
+   * ID of the client in BuilderPrime.
+   * We use this together with `BuilderPrimeMeeting.clientId` to look up the lead setter.
+   */
+  id: number
   firstName: string
   lastName: string
   leadSetterFirstName: string | null
@@ -106,9 +110,9 @@ async function fetchOpportunities(): Promise<OpportunityData[]> {
 }
 
 /**
- * Get lead setter info for an opportunity (with caching)
+ * Get lead setter info for a given CLIENT (with caching)
  */
-async function fetchLeadSetter(opportunityId: number): Promise<{ firstName: string; lastName: string } | null> {
+async function fetchLeadSetter(clientId: number): Promise<{ firstName: string; lastName: string } | null> {
   const now = Date.now()
   
   // Refresh cache if it's stale
@@ -125,8 +129,8 @@ async function fetchLeadSetter(opportunityId: number): Promise<{ firstName: stri
     console.log(`✅ Cached ${opportunities.length} opportunities`)
   }
   
-  // Lookup from cache
-  const opportunity = opportunitiesCache.get(opportunityId)
+  // Lookup from cache using the clientId from the meeting
+  const opportunity = opportunitiesCache.get(clientId)
   
   if (opportunity?.leadSetterFirstName && opportunity?.leadSetterLastName) {
     return {
@@ -142,8 +146,10 @@ async function fetchLeadSetter(opportunityId: number): Promise<{ firstName: stri
  * Format meeting data for GroupMe message
  */
 async function formatMeetingMessage(meeting: BuilderPrimeMeeting): Promise<string> {
-  // Get the lead setter (CSR) info from the clients API
-  const leadSetter = await fetchLeadSetter(meeting.opportunityId)
+  // Get the lead setter (CSR) info from the clients API.
+  // NOTE: The `/api/clients` endpoint is keyed by client ID, so we must
+  // look up using `meeting.clientId`, not `opportunityId`.
+  const leadSetter = await fetchLeadSetter(meeting.clientId)
   
   const csrName = leadSetter 
     ? `${leadSetter.firstName} ${leadSetter.lastName}`
