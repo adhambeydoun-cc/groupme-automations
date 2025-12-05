@@ -6,9 +6,17 @@ import { sendGroupMeMessage } from './groupme'
 export async function handleBuilderPrimeWebhook(payload: any) {
   console.log('🔄 Processing BuilderPrime webhook...')
   
-  const { event, data } = payload
+  const { event, data, type } = payload
 
   try {
+    // Some BuilderPrime webhooks (like the client-context one you showed)
+    // don't include an `event` field; they just send a flat "client" object.
+    // Handle that case explicitly so we can use `leadSetter` and meeting info.
+    if (!event && type === 'client') {
+      await handleClientContextWebhook(payload)
+      return
+    }
+
     switch (event) {
       case 'lead.created':
         await handleNewLead(data)
@@ -97,6 +105,47 @@ async function handleAppointmentScheduled(appointment: any) {
   const customer = appointment.customer_name || appointment.customer || 'Unknown'
 
   const message = `📅 Appointment Set by ${csr}: ${customer} — ${date} @ ${time} — ${type}${notes}`
+
+  await sendGroupMeMessage(message)
+}
+
+/**
+ * Handle "client" context webhook (no explicit event field)
+ * Uses the documented fields:
+ * - clientFirstName / clientLastName
+ * - leadSetter
+ * - upcomingMeeting* fields
+ */
+async function handleClientContextWebhook(client: any) {
+  console.log('🧾 BuilderPrime client-context webhook payload:', client)
+
+  const csr =
+    client.leadSetter ||
+    client.lead_setter ||
+    'Unknown CSR'
+
+  const customerName = `${client.clientFirstName || ''} ${client.clientLastName || ''}`.trim() || 'Unknown'
+
+  // Prefer the full ISO datetime if present so we can format consistently
+  let dateStr = client.upcomingMeetingStartDate || 'TBD'
+  let timeStr = client.upcomingMeetingStartTime || 'TBD'
+
+  if (client.upcomingMeetingStartDateTime) {
+    const dt = new Date(client.upcomingMeetingStartDateTime)
+    if (!isNaN(dt.getTime())) {
+      dateStr = dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    }
+  }
+
+  const meetingType = client.upcomingMeetingDescription || 'Sales Meeting'
+  const location = client.upcomingMeetingLocation
+
+  let message = `📅 Appointment Set by ${csr}: ${customerName} — ${dateStr} @ ${timeStr} — ${meetingType}`
+
+  if (location) {
+    message += ` — Location: ${location}`
+  }
 
   await sendGroupMeMessage(message)
 }
