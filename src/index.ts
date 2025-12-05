@@ -3,7 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import builderPrimeRoutes from './routes/builderprime'
 import groupMeRoutes from './routes/groupme'
-import { startPolling } from './services/builderprime-poller'
+// import { startPolling } from './services/builderprime-poller'
 
 // Load environment variables
 dotenv.config()
@@ -30,13 +30,8 @@ app.get('/health', (req, res) => {
 app.use('/webhook/builderprime', builderPrimeRoutes)
 app.use('/api/groupme', groupMeRoutes)
 
-// Start BuilderPrime polling if API key is configured
-if (process.env.BUILDERPRIME_API_KEY) {
-  console.log('🔄 BuilderPrime API key found, starting automatic polling...')
-  startPolling()
-} else {
-  console.log('⚠️  BUILDERPRIME_API_KEY not configured, polling disabled')
-}
+// BuilderPrime polling disabled: relying on webhooks instead
+console.log('ℹ️ BuilderPrime polling is disabled; using webhooks only.')
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
