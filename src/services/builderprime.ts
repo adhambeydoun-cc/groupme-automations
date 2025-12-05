@@ -56,7 +56,15 @@ Service: ${lead.service || 'Not specified'}
  * Handle appointment scheduling
  */
 async function handleAppointmentScheduled(appointment: any) {
-  const csr = appointment.csr || appointment.created_by || 'CSR'
+  // Log full payload so we can see exactly where the CSR / lead setter lives
+  console.log('🧾 BuilderPrime appointment payload (appointment.scheduled):', appointment)
+
+  const csr =
+    appointment.csr ||
+    appointment.created_by ||
+    appointment.leadSetterName ||
+    appointment.lead_setter_name ||
+    'CSR'
   const notes = appointment.notes ? ` — Notes: ${appointment.notes}` : ''
   const date = appointment.date || appointment.start_date || 'TBD'
   const time = appointment.time || appointment.start_time || 'TBD'
