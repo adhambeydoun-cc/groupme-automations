@@ -59,12 +59,37 @@ async function handleAppointmentScheduled(appointment: any) {
   // Log full payload so we can see exactly where the CSR / lead setter lives
   console.log('🧾 BuilderPrime appointment payload (appointment.scheduled):', appointment)
 
-  const csr =
-    appointment.csr ||
-    appointment.created_by ||
-    appointment.leadSetterName ||
-    appointment.lead_setter_name ||
-    'CSR'
+  // Per BuilderPrime docs, the client context includes a `leadSetter` field.
+  // It may be a simple string (full name) or an object; prefer that over everything else.
+  let csr: string | undefined
+
+  // If webhook gives us a nested client context, prefer that
+  const client = appointment.client || appointment.clientContext || appointment.client_context
+
+  const rawLeadSetter =
+    (client && (client.leadSetter || client.lead_setter)) ??
+    appointment.leadSetter ??
+    appointment.lead_setter
+
+  if (typeof rawLeadSetter === 'string') {
+    csr = rawLeadSetter
+  } else if (rawLeadSetter && typeof rawLeadSetter === 'object') {
+    const first = rawLeadSetter.firstName || rawLeadSetter.first_name
+    const last = rawLeadSetter.lastName || rawLeadSetter.last_name
+    if (first && last) {
+      csr = `${first} ${last}`
+    } else if (first || last) {
+      csr = `${first || ''} ${last || ''}`.trim()
+    }
+  }
+
+  // Fallbacks if leadSetter isn’t present
+  if (!csr) {
+    csr =
+      appointment.csr ||
+      appointment.created_by ||
+      'CSR'
+  }
   const notes = appointment.notes ? ` — Notes: ${appointment.notes}` : ''
   const date = appointment.date || appointment.start_date || 'TBD'
   const time = appointment.time || appointment.start_time || 'TBD'
