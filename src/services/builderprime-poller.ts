@@ -193,14 +193,6 @@ async function fetchLeadSetter(clientId: number): Promise<{ firstName: string; l
         lastName: opportunity.leadSetterLastName
       }
     }
-
-    // Fallback: if no explicit lead setter, try salesperson before giving up
-    if (opportunity.salesPersonFirstName && opportunity.salesPersonLastName) {
-      return {
-        firstName: opportunity.salesPersonFirstName,
-        lastName: opportunity.salesPersonLastName
-      }
-    }
   } else {
     console.warn('⚠️ No client found in cache for meeting.clientId', clientId)
   }
@@ -227,10 +219,7 @@ async function formatMeetingMessage(meeting: BuilderPrimeMeeting): Promise<strin
   
   const csrName = leadSetter 
     ? `${leadSetter.firstName} ${leadSetter.lastName}`
-    // As a secondary fallback, try the meeting's employee if present
-    : (meeting.employeeFirstName && meeting.employeeLastName
-        ? `${meeting.employeeFirstName} ${meeting.employeeLastName}`
-        : 'Unknown CSR')
+    : 'Unknown CSR'
   
   // Use title if customer name is missing
   const customerName = meeting.clientFirstName && meeting.clientLastName
