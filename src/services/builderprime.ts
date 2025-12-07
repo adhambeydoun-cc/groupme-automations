@@ -98,13 +98,12 @@ async function handleAppointmentScheduled(appointment: any) {
       appointment.created_by ||
       'CSR'
   }
-  const notes = appointment.notes ? ` — Notes: ${appointment.notes}` : ''
   const date = appointment.date || appointment.start_date || 'TBD'
   const time = appointment.time || appointment.start_time || 'TBD'
   const type = appointment.type || appointment.appointment_type || 'General'
   const customer = appointment.customer_name || appointment.customer || 'Unknown'
 
-  const message = `📅 Appointment Set by ${csr}: ${customer} — ${date} @ ${time} — ${type}${notes}`
+  const message = `📅 Appointment Set by ${csr}: ${customer} — ${date} @ ${time} — ${type}`
 
   await sendGroupMeMessage(message)
 }
