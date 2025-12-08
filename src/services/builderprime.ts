@@ -61,6 +61,7 @@ Service: ${lead.service || 'Not specified'}
 }
 
 /**
+ * 
  * Handle appointment scheduling
  */
 async function handleAppointmentScheduled(appointment: any) {
@@ -137,7 +138,9 @@ async function handleClientContextWebhook(client: any) {
     }
   }
 
-  const meetingType = client.upcomingMeetingDescription || 'Sales Meeting'
+  // Use the high-level project type instead of the full upcomingMeetingDescription
+  // to avoid including extra notes like "Confirmation call - ...".
+  const meetingType = client.projectType || 'Sales Meeting'
   const location = client.upcomingMeetingLocation
 
   let message = `📅 Appointment Set by ${csr}: ${customerName} — ${dateStr} @ ${timeStr} — ${meetingType}`
