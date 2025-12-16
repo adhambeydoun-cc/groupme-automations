@@ -142,11 +142,17 @@ async function handleClientContextWebhook(client: any) {
   // to avoid including extra notes like "Confirmation call - ...".
   const meetingType = client.projectType || 'Sales Meeting'
   const location = client.upcomingMeetingLocation
+  const className = client.class || client.className || client.class_name
 
   let message = `📅 Appointment Set by ${csr}: ${customerName} — ${dateStr} @ ${timeStr} — ${meetingType}`
 
   if (location) {
     message += ` — Location: ${location}`
+  }
+
+   // Append class name at the very end, without a label
+  if (className) {
+    message += ` — ${className}`
   }
 
   await sendGroupMeMessage(message)
